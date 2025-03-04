@@ -137,8 +137,7 @@ unsigned long sendFile(const char* fileName)
 		/* TODO: Wait until the receiver sends us a message of type RECV_DONE_TYPE telling us 
  		 * that he finished saving a chunk of memory. 
  		 */
-		if (msgrcv(msqid, &rcvMsg, sizeof(rcvMsg) - sizeof(long),
-		RECV_DONE_TYPE, 0) == -1) {
+		if (msgrcv(msqid, &rcvMsg, sizeof(rcvMsg) - sizeof(long), RECV_DONE_TYPE, 0) == -1) {
 		perror("msgrcv");
 		fclose(fp);
 		exit(-1);

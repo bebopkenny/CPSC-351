@@ -33,7 +33,12 @@ string recvFileName()
          */
 	fileNameMsg fNameMessage;
         /* TODO: Receive the file name using msgrcv() */
-	msgrcv(msqid, &fNameMessage, sizeof(fNameMessage) - sizeof(long), FILE_NAME_TRANSFER_TYPE, 0);
+	if (msgrcv(msqid, &fNameMessage, sizeof(fNameMessage) - sizeof(long), FILE_NAME_TRANSFER_TYPE, 0) == -1) {
+ 	perror("msgrcv fileName");
+ 	exit(-1);
+	}
+
+	fileName = fNameMessage.fileName;
 	/* TODO: return the received file name */
         return fileName;
 }
@@ -147,8 +152,7 @@ unsigned long mainLoop(const char* fileName) {
 		{
 			/* TODO: count the number of bytes received */
             size_t written = fwrite(sharedMemPtr, sizeof(char), msgSize, fp);
-            if(written < msgSize && ferror(fp))
-            {
+            if(written < msgSize && ferror(fp)) {
                 perror("fwrite");
                 fclose(fp);
                 exit(-1);
