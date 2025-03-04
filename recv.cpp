@@ -93,8 +93,7 @@ void init(int& shmid, int& msqid, void*& sharedMemPtr)
  * @param fileName - the name of the file received from the sender.
  * @return - the number of bytes received
  */
-unsigned long mainLoop(const char* fileName)
-{
+unsigned long mainLoop(const char* fileName) {
 	/* The size of the message received from the sender */
 	int msgSize = -1;
 	
@@ -105,7 +104,7 @@ unsigned long mainLoop(const char* fileName)
 	string recvFileNameStr = fileName;
 	
 	/* TODO: append __recv to the end of file name */
-	recvFileNameStr.append("__recv");
+    recvFileNameStr.append("__recv");
 
 	/* Open the file for writing */
 	FILE* fp = fopen(recvFileNameStr.c_str(), "w");
@@ -135,21 +134,27 @@ unsigned long mainLoop(const char* fileName)
 		 * <ORIGINAL FILENAME__recv>. For example, if the name of the original
 		 * file is song.mp3, the name of the received file is going to be song.mp3__recv.
 		 */
-		message msg;
-		msgrcv(msqid, &msg, sizeof(msg) - sizeof(long), SENDER_DATA_TYPE, 0);
-		msgSize = msg.size;
+        message msg;
+        if(msgrcv(msqid, &msg, sizeof(msg) - sizeof(long), SENDER_DATA_TYPE, 0) == -1) {
+            perror("msgrcv");
+            fclose(fp);
+            exit(-1);
+        }
+        msgSize = msg.size;
 
 		/* If the sender is not telling us that we are done, then get to work */
 		if(msgSize != 0)
 		{
 			/* TODO: count the number of bytes received */
-			fwrite(sharedMemPtr, sizeof(char), msgSize, fp);
+            size_t written = fwrite(sharedMemPtr, sizeof(char), msgSize, fp);
+            if(written < msgSize && ferror(fp))
+            {
+                perror("fwrite");
+                fclose(fp);
+                exit(-1);
+            }
 
-			/* Save the shared memory to file */
-			if(fwrite(sharedMemPtr, sizeof(char), msgSize, fp) < 0)
-			{
-				perror("fwrite");
-			}
+			numBytesRecv += msgSize;
 			
 			/* TODO: Tell the sender that we are ready for the next set of bytes. 
  			 * I.e., send a message of type RECV_DONE_TYPE. That is, a message
@@ -157,7 +162,11 @@ unsigned long mainLoop(const char* fileName)
  			 */
 			ackMessage ack;
 			ack.mtype = RECV_DONE_TYPE;
-			msgsnd(msqid, &ack, sizeof(ack) - sizeof(long), 0);
+			if(msgsnd(msqid, &ack, sizeof(ack) - sizeof(long), 0) == -1) {
+				 perror("msgsnd ack");
+				 fclose(fp);
+				 exit(-1);
+			 }
 		}
 		/* We are done */
 		else

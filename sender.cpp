@@ -112,26 +112,43 @@ unsigned long sendFile(const char* fileName)
 		 * actually read. This is important; the last chunk read may be less than
 		 * SHARED_MEMORY_CHUNK_SIZE.
  		 */
-		if((sndMsg.size = fread(sharedMemPtr, sizeof(char), SHARED_MEMORY_CHUNK_SIZE, fp)) < 0)
-		{
-			perror("fread");
-			exit(-1);
-		}
+		 size_t bytesRead = fread(sharedMemPtr, 1, SHARED_MEMORY_CHUNK_SIZE, fp);
+
+		 if (ferror(fp)) {
+			 perror("fread");
+			 fclose(fp);
+			 exit(-1);
+		 }
 		
 		/* TODO: count the number of bytes sent. */		
-			message sndMsg;
-			sndMsg.mtype = SENDER_DATA_TYPE;
-			sndMsg.size = fread(sharedMemPtr, sizeof(char), SHARED_MEMORY_CHUNK_SIZE, fp);
+		sndMsg.mtype = SENDER_DATA_TYPE;
+        sndMsg.size  = bytesRead;
+		numBytesSent += bytesRead;
 		/* TODO: Send a message to the receiver telling him that the data is ready
  		 * to be read (message of type SENDER_DATA_TYPE).
  		 */
-		sndMsg.size = fread(sharedMemPtr, sizeof(char), SHARED_MEMORY_CHUNK_SIZE, fp);
+		if (msgsnd(msqid, &sndMsg, sizeof(sndMsg) - sizeof(long), 0) == -1) {
+			perror("msgsnd");
+			fclose(fp);
+			exit(-1);
+		}
+
 		
 		/* TODO: Wait until the receiver sends us a message of type RECV_DONE_TYPE telling us 
  		 * that he finished saving a chunk of memory. 
  		 */
-		ackMessage ack;
-		msgrcv(msqid, &ack, sizeof(ack) - sizeof(long), RECV_DONE_TYPE, 0);
+		if (msgrcv(msqid, &rcvMsg, sizeof(rcvMsg) - sizeof(long),
+		RECV_DONE_TYPE, 0) == -1) {
+		perror("msgrcv");
+		fclose(fp);
+		exit(-1);
+		}
+
+		// If we read fewer than SHARED_MEMORY_CHUNK_SIZE bytes, break out of the loop
+		if (bytesRead < SHARED_MEMORY_CHUNK_SIZE) {
+		break;
+		}
+	}
 
 	
 
@@ -139,17 +156,16 @@ unsigned long sendFile(const char* fileName)
  	  * Lets tell the receiver that we have nothing more to send. We will do this by
  	  * sending a message of type SENDER_DATA_TYPE with size field set to 0. 	
 	  */
-			if (sndMsg.size < SHARED_MEMORY_CHUNK_SIZE || sndMsg.size > 0) {
-			sndMsg.size = 0;
-			msgsnd(msqid, &sndMsg, sizeof(sndMsg) - sizeof(long), 0);
-		}
-	}
-		
-	/* Close the file */
-	fclose(fp);
-	
-	return numBytesSent;
-}
+	 sndMsg.size = 0;
+	 if (msgsnd(msqid, &sndMsg, sizeof(sndMsg) - sizeof(long), 0) == -1) {
+	   perror("msgsnd final");
+	 }
+   
+	 // Close file
+	 fclose(fp);
+   
+	 return numBytesSent;
+   }
 
 /**
  * Used to send the name of the file to the receiver
@@ -164,9 +180,10 @@ void sendFileName(const char* fileName)
 	 * the maximum buffer size in the fileNameMsg
 	 * struct. If exceeds, then terminate with an error.
 	 */
-	if (fileNameSize > MAX_FILE_NAME_SIZE) {
-		exit(-1);
-	}
+	if (fileNameSize >= MAX_FILE_NAME_SIZE) {
+        fprintf(stderr, "File name too long (max %d chars allowed)\n", MAX_FILE_NAME_SIZE - 1);
+        exit(-1);
+    }
 
 	/* TODO: Create an instance of the struct representing the message
 	 * containing the name of the file.
@@ -178,9 +195,13 @@ void sendFileName(const char* fileName)
 
 	/* TODO: Set the file name in the message */
 	strncpy(fMsg.fileName, fileName, MAX_FILE_NAME_SIZE);
+    fMsg.fileName[MAX_FILE_NAME_SIZE - 1] = '\0';
 
 	/* TODO: Send the message using msgsnd */
-	msgsnd(msqid, &fMsg, sizeof(fMsg) - sizeof(long), 0);
+	if (msgsnd(msqid, &fMsg, sizeof(fMsg) - sizeof(long), 0) == -1) {
+        perror("msgsnd fileName");
+        exit(-1);
+    }
 }
 
 
